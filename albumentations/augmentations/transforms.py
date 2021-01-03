@@ -26,6 +26,7 @@ __all__ = [
     "Normalize",
     "Transpose",
     "RandomCrop",
+    "RandomCropAndPad",
     "RandomGamma",
     "CenterCrop",
     "OpticalDistortion",
@@ -433,6 +434,30 @@ class RandomCrop(DualTransform):
 
     def get_transform_init_args_names(self):
         return ("height", "width")
+
+
+class RandomCropAndPad(DualTransform):
+    def __init__(self, height, width, border_mode=cv2.BORDER_REFLECT_101, value=None, always_apply=False, p=1.0):
+        super().__init__(always_apply, p)
+        self.height = height
+        self.width = width
+        self.border_mode = border_mode
+        self.value = value
+
+    def apply(self, img, h_start=0, w_start=0, **params):
+        cropped = F.random_crop(img, self.height, self.width, h_start, w_start)
+        img_height, img_width = img.shape[:2]
+        x1, y1, x2, y2 = F.get_random_crop_coords(img_height, img_width, self.height, self.width, h_start, w_start)
+        padded = F.pad_with_params(
+            cropped, y1, img_height - y2, x1, img_width - x2, border_mode=self.border_mode, value=self.value
+        )
+        return padded
+
+    def get_params(self):
+        return {"h_start": random.random(), "w_start": random.random()}
+
+    def get_transform_init_args_names(self):
+        return ("height", "width", "border_mode", "value")
 
 
 class RandomCropNearBBox(DualTransform):
