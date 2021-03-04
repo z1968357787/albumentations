@@ -58,11 +58,11 @@ def keypoint_rot90(keypoint, factor, rows, cols, **params):
         raise ValueError("Parameter n must be in set {0, 1, 2, 3}")
 
     if factor == 1:
-        x, y, angle = y, (cols - 1) - x, angle - math.pi / 2
+        x, y, angle = y, (cols - 1) - x, angle + math.pi / 2
     elif factor == 2:
         x, y, angle = (cols - 1) - x, (rows - 1) - y, angle - math.pi
     elif factor == 3:
-        x, y, angle = (rows - 1) - y, x, angle + math.pi / 2
+        x, y, angle = (rows - 1) - y, x, angle - math.pi / 2
 
     return x, y, angle, scale
 
