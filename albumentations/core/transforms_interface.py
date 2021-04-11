@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import random
+from typing import Callable, Union
 from warnings import warn
 
 import cv2
@@ -48,7 +49,7 @@ def to_tuple(param, low=None, bias=None):
 class BasicTransform:
     call_backup = None
 
-    def __init__(self, always_apply=False, p=0.5):
+    def __init__(self, always_apply=False, p: Union[float, Callable[[], float]] = 0.5):
         self.p = p
         self.always_apply = always_apply
         self._additional_targets = {}
@@ -60,6 +61,9 @@ class BasicTransform:
         self.replay_mode = False
         self.applied_in_replay = False
 
+    def _should_apply(self) -> bool:
+        return self.always_apply or (random.random() < float(self.p))
+
     def __call__(self, *args, force_apply=False, **kwargs):
         if args:
             raise KeyError("You have to pass data to augmentations as named arguments, for example: aug(image=image)")
@@ -69,7 +73,7 @@ class BasicTransform:
 
             return kwargs
 
-        if (random.random() < self.p) or self.always_apply or force_apply:
+        if force_apply or self._should_apply():
             params = self.get_params()
 
             if self.targets_as_params:

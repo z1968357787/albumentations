@@ -75,6 +75,9 @@ class BaseCompose:
     def __repr__(self):
         return self.indented_repr()
 
+    def _should_apply(self) -> bool:
+        return random.random() < float(self.p)
+
     def indented_repr(self, indent=REPR_INDENT_STEP):
         args = {k: v for k, v in self._to_dict().items() if not (k.startswith("__") or k == "transforms")}
         repr_string = self.__class__.__name__ + "(["
@@ -165,7 +168,7 @@ class Compose(BaseCompose):
             raise KeyError("You have to pass data to augmentations as named arguments, for example: aug(image=image)")
         self._check_args(**data)
         assert isinstance(force_apply, (bool, int)), "force_apply must have bool or int type"
-        need_to_run = force_apply or random.random() < self.p
+        need_to_run = force_apply or self._should_apply()
         for p in self.processors.values():
             p.ensure_data_valid(data)
         transforms = self.transforms if need_to_run else self.transforms.get_always_apply(self.transforms)
@@ -252,9 +255,6 @@ class OneOf(BaseCompose):
 
     def __init__(self, transforms, p=0.5):
         super(OneOf, self).__init__(transforms, p)
-        transforms_ps = [t.p for t in transforms]
-        s = sum(transforms_ps)
-        self.transforms_ps = [t / s for t in transforms_ps]
 
     def __call__(self, force_apply=False, **data):
         if self.replay_mode:
@@ -262,9 +262,13 @@ class OneOf(BaseCompose):
                 data = t(**data)
             return data
 
-        if self.transforms_ps and (force_apply or random.random() < self.p):
+        if force_apply or self._should_apply():
+            transforms_ps = [float(t.p) for t in self.transforms]
+            s = sum(transforms_ps)
+            transforms_ps = [t / s for t in transforms_ps]
+
             random_state = np.random.RandomState(random.randint(0, 2 ** 32 - 1))
-            t = random_state.choice(self.transforms.transforms, p=self.transforms_ps)
+            t = random_state.choice(self.transforms.transforms, p=transforms_ps)
             data = t(force_apply=True, **data)
         return data
 
@@ -283,7 +287,7 @@ class OneOrOther(BaseCompose):
                 data = t(**data)
             return data
 
-        if random.random() < self.p:
+        if self._should_apply():
             return self.transforms[0](force_apply=True, **data)
 
         return self.transforms[-1](force_apply=True, **data)
@@ -304,7 +308,7 @@ class PerChannel(BaseCompose):
         self.channels = channels
 
     def __call__(self, force_apply=False, **data):
-        if force_apply or random.random() < self.p:
+        if force_apply or self._should_apply():
 
             image = data["image"]
 
