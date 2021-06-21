@@ -571,7 +571,7 @@ class RandomGridShuffle(DualTransform):
 
 
 class Normalize(ImageOnlyTransform):
-    """Divide pixel values by 255 = 2**8 - 1, subtract mean per channel and divide by std per channel.
+    """Normalization is applied by the formula: `img = (img - mean * max_pixel_value) / (std * max_pixel_value)`
 
     Args:
         mean (float, list of float): mean values
@@ -2430,7 +2430,7 @@ class MultiplicativeNoise(ImageOnlyTransform):
             shape = [c]
 
         multiplier = np.random.uniform(self.multiplier[0], self.multiplier[1], shape)
-        if F.is_grayscale_image(img):
+        if F.is_grayscale_image(img) and img.ndim == 2:
             multiplier = np.squeeze(multiplier)
 
         return {"multiplier": multiplier}

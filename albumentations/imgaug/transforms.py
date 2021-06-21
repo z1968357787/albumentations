@@ -1,4 +1,10 @@
-import imgaug as ia
+try:
+    import imgaug as ia
+except ImportError as e:
+    raise ImportError(
+        "You are trying to import an augmentation that depends on the imgaug library, but imgaug is not installed. To "
+        "install a version of Albumentations that contains imgaug please run 'pip install -U albumentations[imgaug]'"
+    ) from e
 
 try:
     from imgaug import augmenters as iaa
@@ -109,6 +115,8 @@ class IAACropAndPad(DualIAATransform):
 
 
 class IAAFliplr(DualIAATransform):
+    """This augmentation is deprecated. Please use HorizontalFlip instead."""
+
     def __init__(self, always_apply=False, p=0.5):
         super().__init__(always_apply, p)
         warnings.warn("IAAFliplr is deprecated. Please use HorizontalFlip instead.", FutureWarning)
@@ -122,6 +130,8 @@ class IAAFliplr(DualIAATransform):
 
 
 class IAAFlipud(DualIAATransform):
+    """This augmentation is deprecated. Please use VerticalFlip instead."""
+
     def __init__(self, always_apply=False, p=0.5):
         super().__init__(always_apply, p)
         warnings.warn("IAAFlipud is deprecated. Please use VerticalFlip instead.", FutureWarning)
@@ -134,7 +144,7 @@ class IAAFlipud(DualIAATransform):
         return ()
 
 
-class IAAEmboss(Emboss):
+class IAAEmboss(ImageOnlyIAATransform):
     """Emboss the input image and overlays the result with the original image.
     This augmentation is deprecated. Please use Emboss instead.
 
@@ -149,13 +159,24 @@ class IAAEmboss(Emboss):
     """
 
     def __init__(self, alpha=(0.2, 0.5), strength=(0.2, 0.7), always_apply=False, p=0.5):
-        warnings.warn("IAAEmboss is deprecated. Please use Emboss instead", FutureWarning)
-        super().__init__(alpha=alpha, strength=strength, always_apply=always_apply, p=p)
+        super(IAAEmboss, self).__init__(always_apply, p)
+        self.alpha = to_tuple(alpha, 0.0)
+        self.strength = to_tuple(strength, 0.0)
+        warnings.warn("This augmentation is deprecated. Please use Emboss instead", FutureWarning)
+
+    @property
+    def processor(self):
+        return iaa.Emboss(self.alpha, self.strength)
+
+    def get_transform_init_args_names(self):
+        return ("alpha", "strength")
 
 
 class IAASuperpixels(ImageOnlyIAATransform):
     """Completely or partially transform the input image to its superpixel representation. Uses skimage's version
     of the SLIC algorithm. May be slow.
+
+    This augmentation is deprecated. Please use Superpixels instead.
 
     Args:
         p_replace (float): defines the probability of any superpixel area being replaced by the superpixel, i.e. by
@@ -181,7 +202,7 @@ class IAASuperpixels(ImageOnlyIAATransform):
         return ("p_replace", "n_segments")
 
 
-class IAASharpen(Sharpen):
+class IAASharpen(ImageOnlyIAATransform):
     """Sharpen the input image and overlays the result with the original image.
     This augmentation is deprecated. Please use Sharpen instead
     Args:
@@ -195,12 +216,23 @@ class IAASharpen(Sharpen):
     """
 
     def __init__(self, alpha=(0.2, 0.5), lightness=(0.5, 1.0), always_apply=False, p=0.5):
+        super(IAASharpen, self).__init__(always_apply, p)
+        self.alpha = to_tuple(alpha, 0)
+        self.lightness = to_tuple(lightness, 0)
         warnings.warn("IAASharpen is deprecated. Please use Sharpen instead", FutureWarning)
-        super().__init__(alpha=alpha, lightness=lightness, always_apply=always_apply, p=p)
+
+    @property
+    def processor(self):
+        return iaa.Sharpen(self.alpha, self.lightness)
+
+    def get_transform_init_args_names(self):
+        return ("alpha", "lightness")
 
 
 class IAAAdditiveGaussianNoise(ImageOnlyIAATransform):
     """Add gaussian noise to the input image.
+
+    This augmentation is deprecated. Please use GaussNoise instead.
 
     Args:
         loc (int): mean of the normal distribution that generates the noise. Default: 0.
@@ -231,6 +263,8 @@ class IAAPiecewiseAffine(DualIAATransform):
     """Place a regular grid of points on the input and randomly move the neighbourhood of these point around
     via affine transformations.
 
+    This augmentation is deprecated. Please use PiecewiseAffine instead.
+
     Note: This class introduce interpolation artifacts to mask if it has values other than {0;1}
 
     Args:
@@ -253,6 +287,7 @@ class IAAPiecewiseAffine(DualIAATransform):
         self.order = order
         self.cval = cval
         self.mode = mode
+        warnings.warn("This IAAPiecewiseAffine is deprecated. Please use PiecewiseAffine instead", FutureWarning)
 
     @property
     def processor(self):
@@ -265,6 +300,8 @@ class IAAPiecewiseAffine(DualIAATransform):
 class IAAAffine(DualIAATransform):
     """Place a regular grid of points on the input and randomly move the neighbourhood of these point around
     via affine transformations.
+
+    This augmentation is deprecated. Please use Affine instead.
 
     Note: This class introduce interpolation artifacts to mask if it has values other than {0;1}
 
@@ -297,6 +334,7 @@ class IAAAffine(DualIAATransform):
         self.order = order
         self.cval = cval
         self.mode = mode
+        warnings.warn("This IAAAffine is deprecated. Please use Affine instead", FutureWarning)
 
     @property
     def processor(self):
@@ -330,6 +368,15 @@ class IAAPerspective(Perspective):
         image, mask
     """
 
-    def __init__(self, scale=(0.05, 0.1), keep_size=True, always_apply=False, p=0.5, **kwargs):
-        warnings.warn("IAAPerspective is deprecated. Please use Perspective instead", FutureWarning)
-        super().__init__(scale=scale, keep_size=keep_size, always_apply=always_apply, p=p, **kwargs)
+    def __init__(self, scale=(0.05, 0.1), keep_size=True, always_apply=False, p=0.5):
+        super(IAAPerspective, self).__init__(always_apply, p)
+        self.scale = to_tuple(scale, 1.0)
+        self.keep_size = keep_size
+        warnings.warn("This IAAPerspective is deprecated. Please use Perspective instead", FutureWarning)
+
+    @property
+    def processor(self):
+        return iaa.PerspectiveTransform(self.scale, keep_size=self.keep_size)
+
+    def get_transform_init_args_names(self):
+        return ("scale", "keep_size")

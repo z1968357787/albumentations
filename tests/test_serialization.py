@@ -6,20 +6,15 @@ from unittest.mock import patch
 import cv2
 import pytest
 import numpy as np
-import imgaug as ia
 
 import albumentations as A
 import albumentations.augmentations.functional as F
 from albumentations.core.serialization import SERIALIZABLE_REGISTRY, shorten_class_name
 from albumentations.core.transforms_interface import ImageOnlyTransform
-from .utils import OpenMock
+from .conftest import torch_available, skipif_no_torch
+from .utils import OpenMock, set_seed
 
 TEST_SEEDS = (0, 1, 42, 111, 9999)
-
-
-def set_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
 
 
 @pytest.mark.parametrize(
@@ -54,6 +49,7 @@ def set_seed(seed):
         [A.Transpose, {}],
         [A.RandomRotate90, {}],
         [A.Rotate, {}],
+        [A.SafeRotate, {}],
         [A.ShiftScaleRotate, {}],
         [A.OpticalDistortion, {}],
         [A.GridDistortion, {}],
@@ -78,6 +74,8 @@ def set_seed(seed):
         [A.Emboss, {}],
         [A.CropAndPad, {"px": 10}],
         [A.Superpixels, {}],
+        [A.Affine, {}],
+        [A.PiecewiseAffine, {}],
     ],
 )
 @pytest.mark.parametrize("p", [0.5, 1])
@@ -160,6 +158,15 @@ AUGMENTATION_CLS_PARAMS = (
         ],
         [
             A.Rotate,
+            {
+                "limit": 120,
+                "interpolation": cv2.INTER_CUBIC,
+                "border_mode": cv2.BORDER_CONSTANT,
+                "value": (10, 10, 10),
+            },
+        ],
+        [
+            A.SafeRotate,
             {
                 "limit": 120,
                 "interpolation": cv2.INTER_CUBIC,
@@ -274,6 +281,51 @@ AUGMENTATION_CLS_PARAMS = (
             A.Superpixels,
             {"p_replace": (0.5, 0.7), "n_segments": (20, 30), "max_size": 25, "interpolation": cv2.INTER_CUBIC},
         ],
+        [
+            A.Affine,
+            {
+                "scale": 0.5,
+                "translate_percent": 0.7,
+                "translate_px": None,
+                "rotate": 33,
+                "shear": 21,
+                "interpolation": cv2.INTER_CUBIC,
+                "cval": 25,
+                "cval_mask": 1,
+                "mode": cv2.BORDER_REFLECT,
+                "fit_output": True,
+            },
+        ],
+        [
+            A.Affine,
+            {
+                "scale": {"x": [0.3, 0.5], "y": [0.1, 0.2]},
+                "translate_percent": None,
+                "translate_px": {"x": [10, 200], "y": [5, 101]},
+                "rotate": [333, 360],
+                "shear": {"x": [31, 38], "y": [41, 48]},
+                "interpolation": 3,
+                "cval": [10, 20, 30],
+                "cval_mask": 1,
+                "mode": cv2.BORDER_REFLECT,
+                "fit_output": True,
+            },
+        ],
+        [
+            A.PiecewiseAffine,
+            {
+                "scale": 0.33,
+                "nb_rows": (10, 20),
+                "nb_cols": 33,
+                "interpolation": 2,
+                "mask_interpolation": 1,
+                "cval": 10,
+                "cval_mask": 20,
+                "mode": "edge",
+                "absolute_scale": True,
+                "keypoints_threshold": 0.1,
+            },
+        ],
     ],
 )
 
@@ -349,6 +401,7 @@ def test_augmentations_serialization_to_file_with_custom_parameters(
         [A.Transpose, {}],
         [A.RandomRotate90, {}],
         [A.Rotate, {}],
+        [A.SafeRotate, {}],
         [A.ShiftScaleRotate, {}],
         [A.CenterCrop, {"height": 10, "width": 10}],
         [A.RandomCrop, {"height": 10, "width": 10}],
@@ -373,6 +426,8 @@ def test_augmentations_serialization_to_file_with_custom_parameters(
         [A.Sharpen, {}],
         [A.Emboss, {}],
         [A.Superpixels, {}],
+        [A.Affine, {}],
+        [A.PiecewiseAffine, {}],
     ],
 )
 @pytest.mark.parametrize("p", [0.5, 1])
@@ -423,6 +478,7 @@ def test_augmentations_for_bboxes_serialization(
         [A.Flip, {}],
         [A.RandomRotate90, {}],
         [A.Rotate, {}],
+        [A.SafeRotate, {}],
         [A.ShiftScaleRotate, {}],
         [A.CenterCrop, {"height": 10, "width": 10}],
         [A.RandomCrop, {"height": 10, "width": 10}],
@@ -442,6 +498,8 @@ def test_augmentations_for_bboxes_serialization(
         [A.Sharpen, {}],
         [A.Emboss, {}],
         [A.Superpixels, {}],
+        [A.Affine, {}],
+        [A.PiecewiseAffine, {}],
     ],
 )
 @pytest.mark.parametrize("p", [0.5, 1])
@@ -454,100 +512,6 @@ def test_augmentations_for_keypoints_serialization(augmentation_cls, params, p, 
     set_seed(seed)
     aug_data = aug(image=image, keypoints=keypoints)
     set_seed(seed)
-    deserialized_aug_data = deserialized_aug(image=image, keypoints=keypoints)
-    assert np.array_equal(aug_data["image"], deserialized_aug_data["image"])
-    assert np.array_equal(aug_data["keypoints"], deserialized_aug_data["keypoints"])
-
-
-@pytest.mark.parametrize(
-    ["augmentation_cls", "params"],
-    [
-        [A.IAASuperpixels, {}],
-        [A.IAAAdditiveGaussianNoise, {}],
-        [A.IAACropAndPad, {}],
-        [A.IAAFliplr, {}],
-        [A.IAAFlipud, {}],
-        [A.IAAAffine, {}],
-        [A.IAAPiecewiseAffine, {}],
-        [A.IAAPerspective, {}],
-    ],
-)
-@pytest.mark.parametrize("p", [0.5, 1])
-@pytest.mark.parametrize("seed", TEST_SEEDS)
-@pytest.mark.parametrize("always_apply", (False, True))
-def test_imgaug_augmentations_serialization(augmentation_cls, params, p, seed, image, mask, always_apply):
-    aug = augmentation_cls(p=p, always_apply=always_apply, **params)
-    serialized_aug = A.to_dict(aug)
-    deserialized_aug = A.from_dict(serialized_aug)
-    set_seed(seed)
-    ia.seed(seed)
-    aug_data = aug(image=image, mask=mask)
-    set_seed(seed)
-    ia.seed(seed)
-    deserialized_aug_data = deserialized_aug(image=image, mask=mask)
-    assert np.array_equal(aug_data["image"], deserialized_aug_data["image"])
-    assert np.array_equal(aug_data["mask"], deserialized_aug_data["mask"])
-
-
-@pytest.mark.parametrize(
-    ["augmentation_cls", "params"],
-    [
-        [A.IAASuperpixels, {}],
-        [A.IAAAdditiveGaussianNoise, {}],
-        [A.IAACropAndPad, {}],
-        [A.IAAFliplr, {}],
-        [A.IAAFlipud, {}],
-        [A.IAAAffine, {}],
-        [A.IAAPiecewiseAffine, {}],
-        [A.IAAPerspective, {}],
-    ],
-)
-@pytest.mark.parametrize("p", [0.5, 1])
-@pytest.mark.parametrize("seed", TEST_SEEDS)
-@pytest.mark.parametrize("always_apply", (False, True))
-def test_imgaug_augmentations_for_bboxes_serialization(
-    augmentation_cls, params, p, seed, image, albumentations_bboxes, always_apply
-):
-    aug = augmentation_cls(p=p, always_apply=always_apply, **params)
-    serialized_aug = A.to_dict(aug)
-    deserialized_aug = A.from_dict(serialized_aug)
-    set_seed(seed)
-    ia.seed(seed)
-    aug_data = aug(image=image, bboxes=albumentations_bboxes)
-    set_seed(seed)
-    ia.seed(seed)
-    deserialized_aug_data = deserialized_aug(image=image, bboxes=albumentations_bboxes)
-    assert np.array_equal(aug_data["image"], deserialized_aug_data["image"])
-    assert np.array_equal(aug_data["bboxes"], deserialized_aug_data["bboxes"])
-
-
-@pytest.mark.parametrize(
-    ["augmentation_cls", "params"],
-    [
-        [A.IAASuperpixels, {}],
-        [A.IAAAdditiveGaussianNoise, {}],
-        [A.IAACropAndPad, {}],
-        [A.IAAFliplr, {}],
-        [A.IAAFlipud, {}],
-        [A.IAAAffine, {}],
-        [A.IAAPiecewiseAffine, {}],
-        [A.IAAPerspective, {}],
-    ],
-)
-@pytest.mark.parametrize("p", [0.5, 1])
-@pytest.mark.parametrize("seed", TEST_SEEDS)
-@pytest.mark.parametrize("always_apply", (False, True))
-def test_imgaug_augmentations_for_keypoints_serialization(
-    augmentation_cls, params, p, seed, image, keypoints, always_apply
-):
-    aug = augmentation_cls(p=p, always_apply=always_apply, **params)
-    serialized_aug = A.to_dict(aug)
-    deserialized_aug = A.from_dict(serialized_aug)
-    set_seed(seed)
-    ia.seed(seed)
-    aug_data = aug(image=image, keypoints=keypoints)
-    set_seed(seed)
-    ia.seed(seed)
     deserialized_aug_data = deserialized_aug(image=image, keypoints=keypoints)
     assert np.array_equal(aug_data["image"], deserialized_aug_data["image"])
     assert np.array_equal(aug_data["keypoints"], deserialized_aug_data["keypoints"])
@@ -608,8 +572,16 @@ def test_transform_pipeline_serialization(seed, image, mask):
                     ]
                 ),
             ),
-            A.HorizontalFlip(p=1),
-            A.RandomBrightnessContrast(p=0.5),
+            A.SomeOf(
+                [
+                    A.HorizontalFlip(p=1),
+                    A.Transpose(p=1),
+                    A.HueSaturationValue(p=0.5),
+                    A.RandomBrightnessContrast(p=0.5),
+                ],
+                2,
+                replace=False,
+            ),
         ]
     )
     serialized_aug = A.to_dict(aug)
@@ -641,8 +613,15 @@ def test_transform_pipeline_serialization_with_bboxes(seed, image, bboxes, bbox_
                 A.Compose([A.RandomRotate90(), A.OneOf([A.HorizontalFlip(p=0.5), A.VerticalFlip(p=0.5)])]),
                 A.Compose([A.Rotate(p=0.5), A.OneOf([A.HueSaturationValue(p=0.5), A.RGBShift(p=0.7)], p=1)]),
             ),
-            A.HorizontalFlip(p=1),
-            A.RandomBrightnessContrast(p=0.5),
+            A.SomeOf(
+                [
+                    A.HorizontalFlip(p=1),
+                    A.Transpose(p=1),
+                    A.HueSaturationValue(p=0.5),
+                    A.RandomBrightnessContrast(p=0.5),
+                ],
+                n=5,
+            ),
         ],
         bbox_params={"format": bbox_format, "label_fields": ["labels"]},
     )
@@ -673,8 +652,16 @@ def test_transform_pipeline_serialization_with_keypoints(seed, image, keypoints,
                 A.Compose([A.RandomRotate90(), A.OneOf([A.HorizontalFlip(p=0.5), A.VerticalFlip(p=0.5)])]),
                 A.Compose([A.Rotate(p=0.5), A.OneOf([A.HueSaturationValue(p=0.5), A.RGBShift(p=0.7)], p=1)]),
             ),
-            A.HorizontalFlip(p=1),
-            A.RandomBrightnessContrast(p=0.5),
+            A.SomeOf(
+                n=2,
+                transforms=[
+                    A.HorizontalFlip(p=1),
+                    A.Transpose(p=1),
+                    A.HueSaturationValue(p=0.5),
+                    A.RandomBrightnessContrast(p=0.5),
+                ],
+                replace=False,
+            ),
         ],
         keypoint_params={"format": keypoint_format, "label_fields": ["labels"]},
     )
@@ -712,6 +699,7 @@ def test_transform_pipeline_serialization_with_keypoints(seed, image, keypoints,
         [A.Transpose, {}],
         [A.RandomRotate90, {}],
         [A.Rotate, {}],
+        [A.SafeRotate, {}],
         [A.OpticalDistortion, {}],
         [A.GridDistortion, {}],
         [A.ElasticTransform, {}],
@@ -776,11 +764,25 @@ def test_lambda_serialization(image, mask, albumentations_bboxes, keypoints, see
     assert np.array_equal(aug_data["keypoints"], deserialized_aug_data["keypoints"])
 
 
-def test_serialization_v2_conversion():
+def test_serialization_v2_conversion_without_totensor():
     current_directory = os.path.dirname(os.path.abspath(__file__))
     files_directory = os.path.join(current_directory, "files")
-    transform_0_4_6 = A.load(os.path.join(files_directory, "transform_v0.4.6.json"))
-    with open(os.path.join(files_directory, "output_v0.4.6.json")) as f:
+    transform_0_4_6 = A.load(os.path.join(files_directory, "transform_v0.4.6_without_totensor.json"))
+    with open(os.path.join(files_directory, "output_v0.4.6_without_totensor.json")) as f:
+        output_0_4_6 = json.load(f)
+    np.random.seed(42)
+    image = np.random.randint(low=0, high=255, size=(256, 256, 3), dtype=np.uint8)
+    random.seed(42)
+    transformed_image = transform_0_4_6(image=image)["image"]
+    assert transformed_image.tolist() == output_0_4_6
+
+
+@skipif_no_torch
+def test_serialization_v2_conversion_with_totensor():
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    files_directory = os.path.join(current_directory, "files")
+    transform_0_4_6 = A.load(os.path.join(files_directory, "transform_v0.4.6_with_totensor.json"))
+    with open(os.path.join(files_directory, "output_v0.4.6_with_totensor.json")) as f:
         output_0_4_6 = json.load(f)
     np.random.seed(42)
     image = np.random.randint(low=0, high=255, size=(256, 256, 3), dtype=np.uint8)
@@ -789,11 +791,25 @@ def test_serialization_v2_conversion():
     assert transformed_image.numpy().tolist() == output_0_4_6
 
 
-def test_serialization_v2():
+def test_serialization_v2_without_totensor():
     current_directory = os.path.dirname(os.path.abspath(__file__))
     files_directory = os.path.join(current_directory, "files")
-    transform = A.load(os.path.join(files_directory, "transform_serialization_v2.json"))
-    with open(os.path.join(files_directory, "output_v0.4.6.json")) as f:
+    transform = A.load(os.path.join(files_directory, "transform_serialization_v2_without_totensor.json"))
+    with open(os.path.join(files_directory, "output_v0.4.6_without_totensor.json")) as f:
+        output_0_4_6 = json.load(f)
+    np.random.seed(42)
+    image = np.random.randint(low=0, high=255, size=(256, 256, 3), dtype=np.uint8)
+    random.seed(42)
+    transformed_image = transform(image=image)["image"]
+    assert transformed_image.tolist() == output_0_4_6
+
+
+@skipif_no_torch
+def test_serialization_v2_with_totensor():
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    files_directory = os.path.join(current_directory, "files")
+    transform = A.load(os.path.join(files_directory, "transform_serialization_v2_with_totensor.json"))
+    with open(os.path.join(files_directory, "output_v0.4.6_with_totensor.json")) as f:
         output_0_4_6 = json.load(f)
     np.random.seed(42)
     image = np.random.randint(low=0, high=255, size=(256, 256, 3), dtype=np.uint8)
