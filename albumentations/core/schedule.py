@@ -1,7 +1,23 @@
 import math
+import random
+
 import numpy as np
 
 __all__ = ["LinearIncreaseSchedule", "CosineWarmupAndDecaySchedule"]
+
+
+
+
+class UniformSampler:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def value(self):
+        return random.uniform(float(self.a), float(self.b))
+
+    def __float__(self):
+        return self.value()
 
 
 class LinearIncreaseSchedule:
