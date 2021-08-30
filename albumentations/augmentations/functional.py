@@ -590,16 +590,18 @@ def pad(img, min_height, min_width, border_mode=cv2.BORDER_REFLECT_101, value=No
 
 @preserve_channel_dim
 def pad_with_params(
-    img,
-    h_pad_top,
-    h_pad_bottom,
-    w_pad_left,
-    w_pad_right,
-    border_mode=cv2.BORDER_REFLECT_101,
-    value=None,
+    img, h_pad_top, h_pad_bottom, w_pad_left, w_pad_right, border_mode=cv2.BORDER_REFLECT_101, value=None,
 ):
-    img = cv2.copyMakeBorder(img, h_pad_top, h_pad_bottom, w_pad_left, w_pad_right, border_mode, value=value)
-    return img
+    pad_fn = _maybe_process_in_chunks(
+        cv2.copyMakeBorder,
+        top=h_pad_top,
+        bottom=h_pad_bottom,
+        left=w_pad_left,
+        right=w_pad_right,
+        borderType=border_mode,
+        value=value,
+    )
+    return pad_fn(img)
 
 
 @preserve_shape
@@ -712,14 +714,7 @@ def add_snow(img, snow_point, brightness_coeff):
 
 @preserve_shape
 def add_rain(
-    img,
-    slant,
-    drop_length,
-    drop_width,
-    drop_color,
-    blur_value,
-    brightness_coefficient,
-    rain_drops,
+    img, slant, drop_length, drop_width, drop_color, blur_value, brightness_coefficient, rain_drops,
 ):
     """
 
@@ -757,11 +752,7 @@ def add_rain(
         rain_drop_y1 = rain_drop_y0 + drop_length
 
         cv2.line(
-            image,
-            (rain_drop_x0, rain_drop_y0),
-            (rain_drop_x1, rain_drop_y1),
-            drop_color,
-            drop_width,
+            image, (rain_drop_x0, rain_drop_y0), (rain_drop_x1, rain_drop_y1), drop_color, drop_width,
         )
 
     image = cv2.blur(image, (blur_value, blur_value))  # rainy view are blurry
@@ -928,13 +919,7 @@ def add_shadow(img, vertices_list):
 
 @preserve_shape
 def optical_distortion(
-    img,
-    k=0,
-    dx=0,
-    dy=0,
-    interpolation=cv2.INTER_LINEAR,
-    border_mode=cv2.BORDER_REFLECT_101,
-    value=None,
+    img, k=0, dx=0, dy=0, interpolation=cv2.INTER_LINEAR, border_mode=cv2.BORDER_REFLECT_101, value=None,
 ):
     """Barrel / pincushion distortion. Unconventional augment.
 
@@ -956,14 +941,7 @@ def optical_distortion(
 
     distortion = np.array([k, k, 0, 0, 0], dtype=np.float32)
     map1, map2 = cv2.initUndistortRectifyMap(camera_matrix, distortion, None, None, (width, height), cv2.CV_32FC1)
-    img = cv2.remap(
-        img,
-        map1,
-        map2,
-        interpolation=interpolation,
-        borderMode=border_mode,
-        borderValue=value,
-    )
+    img = cv2.remap(img, map1, map2, interpolation=interpolation, borderMode=border_mode, borderValue=value,)
     return img
 
 
@@ -1021,12 +999,7 @@ def grid_distortion(
     map_y = map_y.astype(np.float32)
 
     remap_fn = _maybe_process_in_chunks(
-        cv2.remap,
-        map1=map_x,
-        map2=map_y,
-        interpolation=interpolation,
-        borderMode=border_mode,
-        borderValue=value,
+        cv2.remap, map1=map_x, map2=map_y, interpolation=interpolation, borderMode=border_mode, borderValue=value,
     )
     return remap_fn(img)
 
@@ -1096,12 +1069,7 @@ def elastic_transform_approx(
     map_y = np.float32(y + dy)
 
     remap_fn = _maybe_process_in_chunks(
-        cv2.remap,
-        map1=map_x,
-        map2=map_y,
-        interpolation=interpolation,
-        borderMode=border_mode,
-        borderValue=value,
+        cv2.remap, map1=map_x, map2=map_y, interpolation=interpolation, borderMode=border_mode, borderValue=value,
     )
     return remap_fn(img)
 
@@ -1674,11 +1642,7 @@ def adjust_contrast_torchvision(img, factor):
     if img.dtype == np.uint8:
         return _adjust_contrast_torchvision_uint8(img, factor, mean)
 
-    return clip(
-        img.astype(np.float32) * factor + mean * (1 - factor),
-        img.dtype,
-        MAX_VALUES_BY_DTYPE[img.dtype],
-    )
+    return clip(img.astype(np.float32) * factor + mean * (1 - factor), img.dtype, MAX_VALUES_BY_DTYPE[img.dtype],)
 
 
 @preserve_shape
