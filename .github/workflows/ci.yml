@@ -7,7 +7,7 @@ jobs:
     runs-on: ${{ matrix.operating-system }}
     strategy:
       matrix:
-        operating-system: [ubuntu-latest, windows-latest, macos-latest]
+        operating-system: [ubuntu-latest, windows-latest, macos-11]
         python-version: [3.6, 3.7, 3.8, 3.9]
         albumentations-version: [tests, develop]
       fail-fast: false
@@ -28,7 +28,7 @@ jobs:
         pip install torch==1.8.1+cpu torchvision==0.9.1+cpu
         -f https://download.pytorch.org/whl/torch_stable.html
     - name: Install PyTorch on MacOS
-      if: matrix.operating-system == 'macos-latest'
+      if: matrix.operating-system == 'macos-11'
       run: pip install torch==1.8.1 torchvision==0.9.1
     - name: Install dependencies
       run: pip install .[${{ matrix.albumentations-version }}]
