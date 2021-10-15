@@ -30,14 +30,24 @@ jobs:
     - name: Install PyTorch on MacOS
       if: matrix.operating-system == 'macos-latest'
       run: pip install torch==1.8.1 torchvision==0.9.1
+    - name: Debug
+      run: ls -l
     - name: Install dependencies
       run: pip install .[${{ matrix.albumentations-version }}]
+    - name: Debug
+      run: ls -l
     - name: Install linters
       run: pip install flake8==3.9.2 flake8-docstrings==1.6.0 mypy==0.910 isort==5.9.3 types-PyYAML==5.4.10 types-setuptools
+    - name: Debug
+      run: ls -l
     - name: Run PyTest
       run: pytest
+    - name: Debug
+      run: ls -l
     - name: Run Flake8
       run: flake8
+    - name: Debug
+      run: ls -l
     - name: Run mypy
       run: mypy .
     - name: Run isort
