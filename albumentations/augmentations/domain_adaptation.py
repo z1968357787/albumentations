@@ -84,6 +84,7 @@ def fourier_domain_adaptation(img: np.ndarray, target_img: np.ndarray, beta: flo
 def apply_histogram(img, reference_image, blend_ratio):
     reference_image = cv2.resize(reference_image, dsize=(img.shape[1], img.shape[0]))
     matched = match_histograms(np.squeeze(img), np.squeeze(reference_image), multichannel=True)
+    matched = matched.astype(img.dtype)
     img = cv2.addWeighted(matched, blend_ratio, img, 1 - blend_ratio, 0)
     return img
 
